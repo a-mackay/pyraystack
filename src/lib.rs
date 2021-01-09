@@ -12,7 +12,6 @@ use url::Url;
 #[pyclass]
 struct SkySparkClient {
     client: raystack::SkySparkClient,
-    rt: Runtime,
 }
 
 #[pymodule]
@@ -31,9 +30,7 @@ impl SkySparkClient {
         password: &str,
         timeout_in_seconds: u64,
     ) -> PyResult<SkySparkClient> {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .build()
-            .map_err(|err| PrError::NewAsyncRuntime(err))?;
+        let rt = new_runtime()?;
 
         let seed = ClientSeed::new(timeout_in_seconds)
             .map_err(|err| PrError::ClientSeed(err))?;
@@ -43,7 +40,7 @@ impl SkySparkClient {
         let client_fut = new_skyspark_client(url, username, password, seed);
         let client = rt.block_on(client_fut)?;
 
-        Ok(Self { client, rt })
+        Ok(Self { client })
     }
 
     pub fn his_write_num(
@@ -70,13 +67,18 @@ impl SkySparkClient {
         let data = data?;
 
         let write_fut = (&mut self.client).his_write_num(&id, &data, unit);
-        let _grid = self
-            .rt
+
+        let rt = new_runtime()?;
+        let _grid = rt
             .block_on(write_fut)
             .map_err(|err| PrError::Raystack(err))?;
 
         Ok(())
     }
+}
+
+fn new_runtime() -> Result<Runtime, PrError> {
+    Runtime::new().map_err(|err| PrError::NewAsyncRuntime(err))
 }
 
 async fn new_skyspark_client(

@@ -20,5 +20,5 @@ chrono-tz = "0.5"
 pyo3 = "0.13"
 raystack = "0.8"
 thiserror = "1"
-tokio = "1.0"
+tokio = { version = "1.0", features = ["rt-multi-thread"] }
 url = "2.2"
