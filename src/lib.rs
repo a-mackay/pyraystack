@@ -15,6 +15,13 @@ struct SkySparkClient {
     rt: Runtime,
 }
 
+#[pymodule]
+fn pyraystack(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<SkySparkClient>()?;
+
+    Ok(())
+}
+
 #[pymethods]
 impl SkySparkClient {
     #[new]
@@ -105,12 +112,8 @@ enum PrError {
 
 impl std::convert::From<PrError> for PyErr {
     fn from(err: PrError) -> PyErr {
-        todo!();
-        // match err.0 {
-        //     Error::Io(e) => IOError::py_err(e.to_string()),
-        //     Error::ParseError(e) => ParseError::py_err(e.to_string()),
-        //     Error::WidthError(e) => ParseError::py_err(e.to_string()),
-        // }
+        let msg = format!("{}", err);
+        pyo3::exceptions::PyException::new_err(msg)
     }
 }
 
