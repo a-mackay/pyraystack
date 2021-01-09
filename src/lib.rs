@@ -1,6 +1,10 @@
+use chrono::DateTime;
+use chrono_tz::Tz;
 use pyo3::prelude::*;
 use pyo3::{PyErr, PyResult};
-use raystack::{ClientSeed, NewClientSeedError, NewSkySparkClientError, ParseRefError, Ref};
+use raystack::{
+    ClientSeed, NewClientSeedError, NewSkySparkClientError, ParseRefError, Ref,
+};
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use url::Url;
@@ -35,12 +39,35 @@ impl SkySparkClient {
         Ok(Self { client, rt })
     }
 
-    pub fn his_write_num(&mut self, id: String) -> PyResult<()> {
+    pub fn his_write_num(
+        &mut self,
+        id: String,
+        unit: Option<&str>,
+        tz: &str,
+        data: Vec<(&str, f64)>,
+    ) -> PyResult<()> {
+        let tz: Tz = tz.parse().map_err(|err| PrError::TzParse(err))?;
         let id = Ref::new(id).map_err(|err| PrError::RefParse(err))?;
-        let data = vec![];
-        let unit = None;
+
+        let data: Result<Vec<(DateTime<_>, f64)>, PrError> = data
+            .into_iter()
+            .map(|(dt_str, num)| {
+                let dt = DateTime::parse_from_rfc3339(dt_str)
+                    .map_err(|err| PrError::DateTimeParse(err))
+                    .map(|dt| dt.with_timezone(&tz));
+
+                dt.map(|dt| (dt, num))
+            })
+            .collect();
+
+        let data = data?;
+
         let write_fut = (&mut self.client).his_write_num(&id, &data, unit);
-        let _grid = self.rt.block_on(write_fut).map_err(|err| PrError::Raystack(err))?;
+        let _grid = self
+            .rt
+            .block_on(write_fut)
+            .map_err(|err| PrError::Raystack(err))?;
+
         Ok(())
     }
 }
@@ -62,12 +89,16 @@ enum PrError {
     NewAsyncRuntime(#[from] std::io::Error),
     #[error("Client seed error: {0}")]
     ClientSeed(#[from] NewClientSeedError),
+    #[error("DateTime parse error: {0}")]
+    DateTimeParse(chrono::ParseError),
     #[error("New client error: {0}")]
     NewClient(#[from] NewSkySparkClientError),
     #[error("Raystack error :{0}")]
     Raystack(raystack::Error),
     #[error("Ref parse error: {0}")]
     RefParse(ParseRefError),
+    #[error("Timezone parse error: {0}")]
+    TzParse(String),
     #[error("Url parse error: {0}")]
     UrlParse(#[from] url::ParseError),
 }
