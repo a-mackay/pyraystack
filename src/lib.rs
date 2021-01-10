@@ -1,5 +1,4 @@
-use chrono::DateTime;
-use chrono_tz::Tz;
+use chrono::{DateTime, TimeZone, Utc};
 use pyo3::prelude::*;
 use pyo3::{PyErr, PyResult};
 use raystack::{
@@ -46,19 +45,18 @@ impl SkySparkClient {
     pub fn his_write_num(
         &mut self,
         id: String,
-        unit: Option<&str>,
-        tz: &str,
+        time_zone_name: &str,
         data: Vec<(&str, f64)>,
+        unit: Option<&str>,
     ) -> PyResult<()> {
-        let tz: Tz = tz.parse().map_err(|err| PrError::TzParse(err))?;
         let id = Ref::new(id).map_err(|err| PrError::RefParse(err))?;
+        let utc = Utc;
 
         let data: Result<Vec<(DateTime<_>, f64)>, PrError> = data
             .into_iter()
             .map(|(dt_str, num)| {
-                let dt = DateTime::parse_from_rfc3339(dt_str)
-                    .map_err(|err| PrError::DateTimeParse(err))
-                    .map(|dt| dt.with_timezone(&tz));
+                let dt = utc.datetime_from_str(dt_str, "%Y-%m-%dT%T%.f")
+                    .map_err(|err| PrError::DateTimeParse(err));
 
                 dt.map(|dt| (dt, num))
             })
@@ -66,7 +64,7 @@ impl SkySparkClient {
 
         let data = data?;
 
-        let write_fut = (&mut self.client).his_write_num(&id, &data, unit);
+        let write_fut = (&mut self.client).utc_his_write_num(&id, time_zone_name, &data, unit);
 
         let rt = new_runtime()?;
         let _grid = rt
@@ -106,8 +104,6 @@ enum PrError {
     Raystack(raystack::Error),
     #[error("Ref parse error: {0}")]
     RefParse(ParseRefError),
-    #[error("Timezone parse error: {0}")]
-    TzParse(String),
     #[error("Url parse error: {0}")]
     UrlParse(#[from] url::ParseError),
 }
